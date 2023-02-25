@@ -7,11 +7,12 @@ use super::*;
 use crate::{
     broker::mock::*,
     task::{Request, TaskOptions, TaskResult},
+    Celery,
 };
 use async_trait::async_trait;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::SystemTime;
+use std::{cell::RefCell, sync::Arc};
 use tokio::time::{self, Duration};
 
 /// We test that a task is sent to the correct queue and executed
@@ -295,7 +296,7 @@ impl Task for DummyTask {
         unimplemented!()
     }
 
-    async fn run(&self, _params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> TaskResult<Self::Returns> {
         unimplemented!()
     }
 }
@@ -322,7 +323,7 @@ impl Task for DummyTask2 {
         unimplemented!()
     }
 
-    async fn run(&self, _params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> TaskResult<Self::Returns> {
         unimplemented!()
     }
 }

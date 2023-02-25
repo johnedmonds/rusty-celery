@@ -3,10 +3,11 @@
 use async_trait::async_trait;
 use celery::error::TaskError;
 use celery::task::{Request, Signature, Task, TaskOptions};
+use celery::Celery;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokio::time::{self, Duration};
 
 static SUCCESSES: Lazy<Mutex<HashMap<String, Result<i32, TaskError>>>> =
@@ -50,7 +51,11 @@ impl Task for add {
         &self.options
     }
 
-    async fn run(&self, params: Self::Params) -> Result<Self::Returns, TaskError> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery>,
+        params: Self::Params,
+    ) -> Result<Self::Returns, TaskError> {
         Ok(params.x + params.y)
     }
 

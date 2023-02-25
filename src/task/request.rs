@@ -1,9 +1,8 @@
 use super::Task;
 use crate::error::ProtocolError;
 use crate::protocol::Message;
-use crate::Celery;
 use chrono::{DateTime, Utc};
-use std::sync::Arc;
+use std::convert::TryFrom;
 use std::time::SystemTime;
 use tokio::time::Duration;
 
@@ -13,7 +12,6 @@ pub struct Request<T>
 where
     T: Task,
 {
-    pub app: Arc<Celery>,
     /// The unique ID of the executing task.
     pub id: String,
 
@@ -55,7 +53,7 @@ impl<T> Request<T>
 where
     T: Task,
 {
-    pub fn new(app: Arc<Celery>, m: Message, p: T::Params) -> Self {
+    pub fn new(m: Message, p: T::Params) -> Self {
         let time_limit = match m.headers.timelimit {
             (Some(soft_timelimit), Some(hard_timelimit)) => {
                 Some(std::cmp::min(soft_timelimit, hard_timelimit))
@@ -65,7 +63,6 @@ where
             _ => None,
         };
         Self {
-            app,
             id: m.headers.id,
             group: m.headers.group,
             chord: None,
@@ -110,9 +107,17 @@ where
             false
         }
     }
-    pub fn try_from_message(app: Arc<Celery>, m: Message) -> Result<Self, ProtocolError> {
+}
+
+impl<T> TryFrom<Message> for Request<T>
+where
+    T: Task,
+{
+    type Error = ProtocolError;
+
+    fn try_from(m: Message) -> Result<Self, Self::Error> {
         let body = m.body::<T>()?;
         let (task_params, _) = body.parts();
-        Ok(Self::new(app, m, task_params))
+        Ok(Self::new(m, task_params))
     }
 }

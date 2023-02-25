@@ -4,9 +4,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use rand::distributions::{Distribution, Uniform};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use crate::error::TaskError;
+use crate::{error::TaskError, Celery};
 
 mod async_result;
 mod options;
@@ -91,7 +94,7 @@ pub trait Task: Send + Sync + std::marker::Sized {
     fn options(&self) -> &TaskOptions;
 
     /// This function defines how a task executes.
-    async fn run(&self, params: Self::Params) -> TaskResult<Self::Returns>;
+    async fn run(&self, app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns>;
 
     /// Callback that will run after a task fails.
     #[allow(unused_variables)]

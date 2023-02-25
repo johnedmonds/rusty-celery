@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{self, Duration, Instant};
@@ -19,6 +20,7 @@ pub(super) struct Tracer<T>
 where
     T: Task,
 {
+    app: Arc<Celery>,
     task: T,
     event_tx: UnboundedSender<TaskEvent>,
 }
@@ -27,7 +29,7 @@ impl<T> Tracer<T>
 where
     T: Task,
 {
-    fn new(task: T, event_tx: UnboundedSender<TaskEvent>) -> Self {
+    fn new(app: Arc<Celery>, task: T, event_tx: UnboundedSender<TaskEvent>) -> Self {
         if let Some(eta) = task.request().eta {
             info!(
                 "Task {}[{}] received, ETA: {}",
@@ -39,7 +41,11 @@ where
             info!("Task {}[{}] received", task.name(), task.request().id);
         }
 
-        Self { task, event_tx }
+        Self {
+            app,
+            task,
+            event_tx,
+        }
     }
 }
 
@@ -71,11 +77,18 @@ where
             Some(secs) => {
                 debug!("Executing task with {} second time limit", secs);
                 let duration = Duration::from_secs(secs as u64);
-                time::timeout(duration, self.task.run(self.task.request().params.clone()))
-                    .await
-                    .unwrap_or(Err(TaskError::TimeoutError))
+                time::timeout(
+                    duration,
+                    self.task.run(&self.app, self.task.request().params.clone()),
+                )
+                .await
+                .unwrap_or(Err(TaskError::TimeoutError))
             }
-            None => self.task.run(self.task.request().params.clone()).await,
+            None => {
+                self.task
+                    .run(&self.app, self.task.request().params.clone())
+                    .await
+            }
         };
         let duration = start.elapsed();
 
@@ -243,7 +256,7 @@ pub(super) fn build_tracer<T: Task + Send + 'static>(
     hostname: String,
 ) -> TraceBuilderResult {
     // Build request object.
-    let mut request = Request::<T>::try_from_message(app, message)?;
+    let mut request = Request::<T>::try_from(message)?;
     request.hostname = Some(hostname);
 
     // Override app-level options with task-level options.
@@ -255,5 +268,5 @@ pub(super) fn build_tracer<T: Task + Send + 'static>(
     // it.
     let task = T::from_request(request, options);
 
-    Ok(Box::new(Tracer::<T>::new(task, event_tx)))
+    Ok(Box::new(Tracer::<T>::new(app.clone(), task, event_tx)))
 }

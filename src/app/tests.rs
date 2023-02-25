@@ -5,6 +5,7 @@ use crate::task::{Request, Signature, Task, TaskOptions, TaskResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 async fn build_basic_app() -> Celery {
@@ -64,7 +65,7 @@ impl Task for AddTask {
         &self.options
     }
 
-    async fn run(&self, params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(&self, _app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns> {
         Ok(params.x + params.y)
     }
 }
@@ -116,7 +117,7 @@ impl Task for MultiplyTask {
         &self.options
     }
 
-    async fn run(&self, params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(&self, _app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns> {
         Ok(params.x * params.y)
     }
 }

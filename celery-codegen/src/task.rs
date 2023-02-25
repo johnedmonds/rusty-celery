@@ -1,5 +1,7 @@
 // Adapted from https://github.com/kureuil/batch-rs/blob/master/batch-codegen/src/job.rs.
 
+use std::iter::repeat;
+
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -29,6 +31,7 @@ enum TaskAttr {
     RetryForUnexpected(syn::LitBool),
     AcksLate(syn::LitBool),
     Bind(syn::LitBool),
+    Context(syn::LitBool),
     OnFailure(syn::Ident),
     OnSuccess(syn::Ident),
 }
@@ -54,6 +57,7 @@ struct Task {
     return_type: Option<syn::Type>,
     is_async: bool,
     bind: bool,
+    context: bool,
     on_failure: Option<syn::Ident>,
     on_success: Option<syn::Ident>,
 }
@@ -178,6 +182,15 @@ impl TaskAttrs {
             })
             .next()
     }
+    fn context(&self) -> Option<syn::LitBool> {
+        self.attrs
+            .iter()
+            .filter_map(|a| match a {
+                TaskAttr::Context(r) => Some(r.clone()),
+                _ => None,
+            })
+            .next()
+    }
 
     fn on_failure(&self) -> Option<syn::Ident> {
         self.attrs
@@ -222,6 +235,7 @@ mod kw {
     syn::custom_keyword!(acks_late);
     syn::custom_keyword!(content_type);
     syn::custom_keyword!(bind);
+    syn::custom_keyword!(context);
     syn::custom_keyword!(on_failure);
     syn::custom_keyword!(on_success);
 }
@@ -277,6 +291,10 @@ impl parse::Parse for TaskAttr {
             input.parse::<kw::bind>()?;
             input.parse::<Token![=]>()?;
             Ok(TaskAttr::Bind(input.parse()?))
+        } else if lookahead.peek(kw::context) {
+            input.parse::<kw::context>()?;
+            input.parse::<Token![=]>()?;
+            Ok(TaskAttr::Context(input.parse()?))
         } else if lookahead.peek(kw::on_failure) {
             input.parse::<kw::on_failure>()?;
             input.parse::<Token![=]>()?;
@@ -314,6 +332,10 @@ impl Task {
             is_async: false,
             bind: attrs
                 .bind()
+                .map(|lit_bool| lit_bool.value)
+                .unwrap_or_default(),
+            context: attrs
+                .context()
                 .map(|lit_bool| lit_bool.value)
                 .unwrap_or_default(),
             on_failure: attrs.on_failure(),
@@ -401,16 +423,21 @@ fn args_to_arg_names<'a>(args: impl Iterator<Item = &'a Ident>) -> TokenStream {
         .collect()
 }
 
-fn args_to_bindings<'a>(args: impl Iterator<Item = Option<&'a Ident>>, bind: bool) -> TokenStream {
-    args.into_iter()
-        .enumerate()
-        .filter_map(|(i, ident)| Some((i, ident?)))
-        .map(|(i, ident)| {
-            if bind && i == 0 {
-                quote! {let #ident = self;}
-            } else {
-                quote! {let #ident = params.#ident;}
-            }
+fn args_to_bindings<'a>(
+    idents: impl Iterator<Item = Option<&'a Ident>>,
+    bind: bool,
+    context: bool,
+) -> TokenStream {
+    let special_arg_rhs = IntoIterator::into_iter([
+        bind.then_some(quote! {self}),
+        context.then_some(quote! {app}),
+    ]);
+    idents
+        .zip(special_arg_rhs.chain(repeat(None)))
+        .filter_map(|(ident, rhs)| Some((ident?, rhs)))
+        .map(|(ident, rhs)| {
+            let rhs = rhs.unwrap_or(quote! {params.#ident});
+            quote! {let #ident = #rhs;}
         })
         .collect()
 }
@@ -481,7 +508,7 @@ impl ToTokens for Task {
             .map(|r| quote! { Some(#r) })
             .unwrap_or_else(|| quote! { Some(#krate::protocol::MessageContentType::Json) });
         let task_name = self.name.as_ref().unwrap();
-        let skip_amount = self.bind as usize;
+        let skip_amount = self.bind as usize + (self.context as usize);
         let types_and_idents = self.original_args.iter().map(arg_to_type_and_ident);
         let normal_types_and_idents = types_and_idents.clone().skip(skip_amount).flatten();
         let idents = types_and_idents
@@ -490,7 +517,7 @@ impl ToTokens for Task {
         let normal_idents = idents.clone().skip(skip_amount).flatten();
         let arg_names = args_to_arg_names(normal_idents.clone());
         let serialized_fields = args_to_fields(normal_types_and_idents.clone());
-        let deserialized_bindings = args_to_bindings(idents.clone(), self.bind);
+        let deserialized_bindings = args_to_bindings(idents.clone(), self.bind, self.context);
         let inner_block = {
             let block = &self.inner_block;
             quote!(#block)
@@ -641,7 +668,7 @@ impl ToTokens for Task {
                     }
 
                     #[allow(unused_variables)]
-                    async fn run(&self, params: Self::Params) -> #return_type {
+                    async fn run(&self, app: &std::sync::Arc<#krate::Celery>, params: Self::Params) -> #return_type {
                         #deserialized_bindings
                         #call_run_implementation
                     }

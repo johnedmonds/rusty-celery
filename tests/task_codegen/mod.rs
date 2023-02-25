@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use celery::error::TaskError;
 use celery::task::{Task, TaskResult};
+use celery::Celery;
 
 #[celery::task(name = "add")]
 fn add(x: i32, y: i32) -> TaskResult<i32> {
@@ -64,6 +67,22 @@ fn bound_task_with_other_params(t: &Self, default_time_limit: u32) -> TaskResult
     Ok(t.time_limit().unwrap_or(default_time_limit))
 }
 
+#[celery::task(bind = true, context = true)]
+fn bound_task_with_context(t: &Self, context: &Arc<Celery>) -> TaskResult<Option<u32>> {
+    println!("{}", context.hostname);
+    t.retry_with_countdown(2)?;
+    Ok(t.time_limit())
+}
+
+#[celery::task(bind = true, context = true)]
+fn bound_task_with_other_params_and_context(
+    t: &Self,
+    context: &Arc<Celery>,
+    default_time_limit: u32,
+) -> TaskResult<u32> {
+    println!("{}", context.hostname);
+    Ok(t.time_limit().unwrap_or(default_time_limit))
+}
 // This didn't work before since Task::run took a reference to self
 // instead of consuming self, so it was like
 //

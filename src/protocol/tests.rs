@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use super::*;
 use crate::error::TaskError;
 use crate::task::{Request, Task, TaskOptions};
+use crate::Celery;
 use chrono::{DateTime, SecondsFormat, Utc};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -36,7 +38,7 @@ impl Task for TestTask {
         &self.options
     }
 
-    async fn run(&self, _params: Self::Params) -> Result<(), TaskError> {
+    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> Result<(), TaskError> {
         Ok(())
     }
 }
