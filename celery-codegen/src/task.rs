@@ -1,6 +1,6 @@
 // Adapted from https://github.com/kureuil/batch-rs/blob/master/batch-codegen/src/job.rs.
 
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -376,114 +376,61 @@ impl VisitMut for Task {
     }
 }
 
-fn args_to_fields<'a>(
-    args: impl IntoIterator<Item = &'a syn::FnArg>,
-    skip_first: bool,
-) -> TokenStream {
-    args.into_iter()
-        .skip(usize::from(skip_first))
-        .fold(TokenStream::new(), |acc, arg| match arg {
-            syn::FnArg::Typed(cap) => {
-                let ident = match *cap.pat {
-                    syn::Pat::Ident(ref pat) => &pat.ident,
-                    _ => return acc,
-                };
-                let ty = &cap.ty;
-                quote! {
-                    #acc
-                    #ident: #ty,
-                }
-            }
-            _ => acc,
-        })
+type TypeAndIdent<'a> = (&'a Box<syn::Type>, &'a Ident);
+
+fn arg_to_type_and_ident<'a>(arg: &'a syn::FnArg) -> Option<TypeAndIdent<'a>> {
+    if let syn::FnArg::Typed(cap) = arg {
+        if let syn::Pat::Ident(ref pat) = *cap.pat {
+            return Some((&cap.ty, &pat.ident));
+        }
+    }
+    None
 }
 
-fn args_to_arg_names<'a>(
-    args: impl IntoIterator<Item = &'a syn::FnArg>,
-    skip_first: bool,
-) -> TokenStream {
-    args.into_iter()
-        .skip(usize::from(skip_first))
-        .fold(TokenStream::new(), |acc, arg| match arg {
-            syn::FnArg::Typed(cap) => match *cap.pat {
-                syn::Pat::Ident(ref pat) => {
-                    let name = &pat.ident.to_string();
-                    quote! {
-                        #acc
-                        #name,
-                    }
-                }
-                _ => acc,
-            },
-            _ => acc,
+fn args_to_fields<'a>(types_and_idents: impl Iterator<Item = TypeAndIdent<'a>>) -> TokenStream {
+    types_and_idents
+        .map(|(ty, ident)| {
+            quote! {#ident: #ty,}
         })
+        .collect()
 }
 
-fn args_to_bindings<'a>(args: impl IntoIterator<Item = &'a syn::FnArg>, bind: bool) -> TokenStream {
+fn args_to_arg_names<'a>(args: impl Iterator<Item = &'a Ident>) -> TokenStream {
+    args.map(|ident| ident.to_string())
+        .map(|name| quote! {#name,})
+        .collect()
+}
+
+fn args_to_bindings<'a>(args: impl Iterator<Item = Option<&'a Ident>>, bind: bool) -> TokenStream {
     args.into_iter()
         .enumerate()
-        .fold(TokenStream::new(), |acc, (i, arg)| match arg {
-            syn::FnArg::Typed(cap) => match *cap.pat {
-                syn::Pat::Ident(ref pat) => {
-                    let ident = &pat.ident;
-                    if bind && i == 0 {
-                        quote! {
-                            let #ident = self;
-                        }
-                    } else {
-                        quote! {
-                            #acc
-                            let #ident = params.#ident;
-                        }
-                    }
-                }
-                _ => acc,
-            },
-            _ => acc,
+        .filter_map(|(i, ident)| Some((i, ident?)))
+        .map(|(i, ident)| {
+            if bind && i == 0 {
+                quote! {let #ident = self;}
+            } else {
+                quote! {let #ident = params.#ident;}
+            }
         })
+        .collect()
 }
 
-fn args_to_calling_args<'a>(
-    args: impl IntoIterator<Item = &'a syn::FnArg>,
-    skip_first: bool,
-) -> TokenStream {
+fn args_to_calling_args<'a>(args: impl Iterator<Item = &'a Ident>) -> TokenStream {
     args.into_iter()
-        .skip(usize::from(skip_first))
-        .fold(TokenStream::new(), |acc, arg| match arg {
-            syn::FnArg::Typed(cap) => match *cap.pat {
-                syn::Pat::Ident(ref pat) => {
-                    let ident = &pat.ident;
-                    quote! {
-                        #acc
-                        #ident,
-                    }
-                }
-                _ => acc,
-            },
-            _ => acc,
+        .map(|ident| {
+            quote! {#ident,}
         })
+        .collect()
 }
 
 fn args_to_typed_inputs<'a>(
-    args: impl IntoIterator<Item = &'a syn::FnArg>,
-    skip_first: bool,
+    types_and_idents: impl Iterator<Item = TypeAndIdent<'a>>,
 ) -> TokenStream {
-    args.into_iter()
-        .skip(usize::from(skip_first))
-        .fold(TokenStream::new(), |acc, arg| match arg {
-            syn::FnArg::Typed(cap) => {
-                let ident = match *cap.pat {
-                    syn::Pat::Ident(ref pat) => &pat.ident,
-                    _ => return acc,
-                };
-                let ty = &cap.ty;
-                quote! {
-                    #acc
-                    #ident: #ty,
-                }
-            }
-            _ => acc,
+    types_and_idents
+        .map(|(ty, ident)| {
+            quote! {#ident: #ty,}
         })
+        .collect()
 }
 
 impl ToTokens for Task {
@@ -534,9 +481,16 @@ impl ToTokens for Task {
             .map(|r| quote! { Some(#r) })
             .unwrap_or_else(|| quote! { Some(#krate::protocol::MessageContentType::Json) });
         let task_name = self.name.as_ref().unwrap();
-        let arg_names = args_to_arg_names(&self.original_args, self.bind);
-        let serialized_fields = args_to_fields(&self.original_args, self.bind);
-        let deserialized_bindings = args_to_bindings(&self.original_args, self.bind);
+        let skip_amount = self.bind as usize;
+        let types_and_idents = self.original_args.iter().map(arg_to_type_and_ident);
+        let normal_types_and_idents = types_and_idents.clone().skip(skip_amount).flatten();
+        let idents = types_and_idents
+            .clone()
+            .map(|type_and_ident| Some(type_and_ident?.1));
+        let normal_idents = idents.clone().skip(skip_amount).flatten();
+        let arg_names = args_to_arg_names(normal_idents.clone());
+        let serialized_fields = args_to_fields(normal_types_and_idents.clone());
+        let deserialized_bindings = args_to_bindings(idents.clone(), self.bind);
         let inner_block = {
             let block = &self.inner_block;
             quote!(#block)
@@ -546,10 +500,10 @@ impl ToTokens for Task {
             .as_ref()
             .map(|ty| quote!(#ty))
             .unwrap_or_else(|| quote!(#krate::task::TaskResult<()>));
-        let typed_inputs = args_to_typed_inputs(&self.original_args, self.bind);
-        let typed_run_inputs = args_to_typed_inputs(&self.original_args, false);
-        let params_args = args_to_calling_args(&self.original_args, self.bind);
-        let calling_args = args_to_calling_args(&self.original_args, false);
+        let typed_inputs = args_to_typed_inputs(normal_types_and_idents);
+        let typed_run_inputs = args_to_typed_inputs(types_and_idents.flatten());
+        let params_args = args_to_calling_args(normal_idents);
+        let calling_args = args_to_calling_args(idents.flatten());
 
         let wrapper_struct = quote! {
             #[allow(non_camel_case_types)]
