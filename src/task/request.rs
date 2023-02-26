@@ -1,4 +1,4 @@
-use super::Task;
+use super::TaskSignature;
 use crate::error::ProtocolError;
 use crate::protocol::Message;
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use tokio::time::Duration;
 #[derive(Clone)]
 pub struct Request<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     /// The unique ID of the executing task.
     pub id: String,
@@ -51,7 +51,7 @@ where
 
 impl<T> Request<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     pub fn new(m: Message, p: T::Params) -> Self {
         let time_limit = match m.headers.timelimit {
@@ -111,7 +111,7 @@ where
 
 impl<T> TryFrom<Message> for Request<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     type Error = ProtocolError;
 

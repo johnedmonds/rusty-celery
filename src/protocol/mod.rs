@@ -19,7 +19,7 @@ use std::process;
 use std::time::SystemTime;
 use uuid::Uuid;
 
-use crate::error::{ContentTypeError, ProtocolError};
+use crate::{error::{ContentTypeError, ProtocolError}, task::TaskSignature};
 use crate::task::{Signature, Task};
 
 pub(crate) const ENGINE: GeneralPurpose = GeneralPurpose::new(&alphabet::STANDARD, PAD);
@@ -254,7 +254,7 @@ pub struct Message {
 
 impl Message {
     /// Try deserializing the body.
-    pub fn body<T: Task>(&self) -> Result<MessageBody<T>, ProtocolError> {
+    pub fn body<T: TaskSignature>(&self) -> Result<MessageBody<T>, ProtocolError> {
         match self.properties.content_type.as_str() {
             "application/json" => {
                 let value: Value = from_slice(&self.raw_body)?;
@@ -622,11 +622,11 @@ pub struct MessageHeaders {
 /// The body of a message. Contains the task itself as well as callback / errback
 /// signatures and work-flow primitives.
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct MessageBody<T: Task>(Vec<u8>, pub(crate) T::Params, pub(crate) MessageBodyEmbed);
+pub struct MessageBody<T: TaskSignature>(Vec<u8>, pub(crate) T::Params, pub(crate) MessageBodyEmbed);
 
 impl<T> MessageBody<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     pub fn new(params: T::Params) -> Self {
         Self(vec![], params, MessageBodyEmbed::default())
