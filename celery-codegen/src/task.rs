@@ -679,8 +679,7 @@ impl ToTokens for Task {
             const #dummy_const: () = {
                 use #export::async_trait;
 
-                #[async_trait]
-                impl #krate::task::Task for #wrapper {
+                impl #krate::task::TaskSignature for #wrapper {
                     const NAME: &'static str = #task_name;
                     const ARGS: &'static [&'static str] = &[#arg_names];
                     const DEFAULTS: #krate::task::TaskOptions = #krate::task::TaskOptions {
@@ -696,6 +695,10 @@ impl ToTokens for Task {
 
                     type Params = #params_type;
                     type Returns = <#return_type as #krate::task::AsTaskResult>::Returns;
+                }
+
+                #[async_trait]
+                impl #krate::task::Task for #wrapper {
                     type Context = #celery_generic_type;
 
                     fn from_request(

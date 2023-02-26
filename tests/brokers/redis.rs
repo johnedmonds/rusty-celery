@@ -2,7 +2,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use celery::error::TaskError;
-use celery::task::{Request, Signature, Task, TaskOptions};
+use celery::task::{Request, Signature, Task, TaskOptions, TaskSignature};
 use celery::Celery;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -31,13 +31,16 @@ impl add {
     }
 }
 
-#[async_trait]
-impl Task for add {
+impl TaskSignature for add {
     const NAME: &'static str = "add";
     const ARGS: &'static [&'static str] = &["x", "y"];
 
     type Params = AddParams;
     type Returns = i32;
+}
+
+#[async_trait]
+impl Task for add {
     type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {

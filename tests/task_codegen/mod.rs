@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use celery::error::TaskError;
-use celery::task::{Task, TaskResult};
+use celery::task::{Task, TaskResult, TaskSignature};
 use celery::Celery;
 
 #[celery::task(name = "add")]

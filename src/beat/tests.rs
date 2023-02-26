@@ -6,7 +6,7 @@
 use super::*;
 use crate::{
     broker::mock::*,
-    task::{Request, TaskOptions, TaskResult},
+    task::{Request, TaskOptions, TaskResult, TaskSignature},
     Celery,
 };
 use async_trait::async_trait;
@@ -277,12 +277,15 @@ async fn test_beat_max_sleep_duration() {
 #[derive(Clone)]
 struct DummyTask {}
 
-#[async_trait]
-impl Task for DummyTask {
+impl TaskSignature for DummyTask {
     const NAME: &'static str = "dummy_task";
     const ARGS: &'static [&'static str] = &[];
     type Params = ();
     type Returns = ();
+}
+
+#[async_trait]
+impl Task for DummyTask {
     type Context = ();
 
     fn from_request(_request: Request<Self>, _options: TaskOptions) -> Self {
@@ -309,12 +312,15 @@ impl Task for DummyTask {
 #[derive(Clone)]
 struct DummyTask2 {}
 
-#[async_trait]
-impl Task for DummyTask2 {
+impl TaskSignature for DummyTask2 {
     const NAME: &'static str = "dummy_task2";
     const ARGS: &'static [&'static str] = &[];
     type Params = ();
     type Returns = ();
+}
+
+#[async_trait]
+impl Task for DummyTask2 {
     type Context = ();
 
     fn from_request(_request: Request<Self>, _options: TaskOptions) -> Self {

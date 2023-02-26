@@ -1,7 +1,7 @@
 use super::{Celery, CeleryBuilder};
 use crate::broker::mock::MockBroker;
 use crate::protocol::MessageContentType;
-use crate::task::{Request, Signature, Task, TaskOptions, TaskResult};
+use crate::task::{Request, Signature, Task, TaskOptions, TaskResult, TaskSignature};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -44,14 +44,16 @@ impl AddTask {
         Signature::<Self>::new(AddParams { x, y })
     }
 }
-
-#[async_trait]
-impl Task for AddTask {
+impl TaskSignature for AddTask {
     const NAME: &'static str = "add";
     const ARGS: &'static [&'static str] = &["x", "y"];
 
     type Params = AddParams;
     type Returns = i32;
+}
+
+#[async_trait]
+impl Task for AddTask {
     type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
@@ -92,8 +94,7 @@ impl MultiplyTask {
     }
 }
 
-#[async_trait]
-impl Task for MultiplyTask {
+impl TaskSignature for MultiplyTask {
     const NAME: &'static str = "multiply";
     const ARGS: &'static [&'static str] = &["x", "y"];
     const DEFAULTS: TaskOptions = TaskOptions {
@@ -106,9 +107,12 @@ impl Task for MultiplyTask {
         acks_late: None,
         content_type: None,
     };
-
     type Params = MultiplyParams;
     type Returns = i32;
+}
+
+#[async_trait]
+impl Task for MultiplyTask {
     type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {

@@ -1,4 +1,4 @@
-use super::{Task, TaskOptions};
+use super::{TaskOptions, TaskSignature};
 use crate::protocol::MessageContentType;
 use chrono::{DateTime, Utc};
 
@@ -23,7 +23,7 @@ use chrono::{DateTime, Utc};
 #[derive(Clone)]
 pub struct Signature<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     /// The parameters for the task invocation.
     pub(crate) params: T::Params,
@@ -54,7 +54,7 @@ where
 
 impl<T> Signature<T>
 where
-    T: Task,
+    T: TaskSignature,
 {
     /// Create a new `Signature` from task parameters.
     pub fn new(params: T::Params) -> Self {

@@ -36,13 +36,8 @@ where
     type Returns = R;
 }
 
-/// A `Task` represents a unit of work that a `Celery` app can produce or consume.
-///
-/// The recommended way to create tasks is through the [`task`](../attr.task.html) attribute macro, not by directly implementing
-/// this trait. For more information see the [tasks chapter](https://rusty-celery.github.io/guide/defining-tasks.html)
-/// in the Rusty Celery Book.
-#[async_trait]
-pub trait Task: Send + Sync + std::marker::Sized {
+/// A `TaskSignature` represents all the information about a `Task` that can be sent through a broker to identify that task.
+pub trait TaskSignature {
     /// The name of the task. When a task is registered it will be registered with this name.
     const NAME: &'static str;
 
@@ -68,7 +63,15 @@ pub trait Task: Send + Sync + std::marker::Sized {
 
     /// The return type of the task.
     type Returns: Send + Sync + std::fmt::Debug;
+}
 
+/// A `Task` represents a unit of work that a `Celery` app can produce or consume.
+///
+/// The recommended way to create tasks is through the [`task`](../attr.task.html) attribute macro, not by directly implementing
+/// this trait. For more information see the [tasks chapter](https://rusty-celery.github.io/guide/defining-tasks.html)
+/// in the Rusty Celery Book.
+#[async_trait]
+pub trait Task: TaskSignature + Send + Sync + std::marker::Sized {
     /// The context passed to the Celery app when the user constructed it.
     type Context: Send + Sync;
 

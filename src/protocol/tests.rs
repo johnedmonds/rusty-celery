@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use super::*;
 use crate::error::TaskError;
-use crate::task::{Request, Task, TaskOptions};
+use crate::task::{Request, Task, TaskOptions, TaskSignature};
 use crate::Celery;
 use chrono::{DateTime, SecondsFormat, Utc};
 use std::sync::Arc;
@@ -18,13 +18,16 @@ struct TestTask {
     options: TaskOptions,
 }
 
-#[async_trait]
-impl Task for TestTask {
+impl TaskSignature for TestTask {
     const NAME: &'static str = "test";
     const ARGS: &'static [&'static str] = &["a"];
 
     type Params = TestTaskParams;
     type Returns = ();
+}
+
+#[async_trait]
+impl Task for TestTask {
     type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
