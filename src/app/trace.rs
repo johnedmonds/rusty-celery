@@ -16,20 +16,20 @@ use crate::Celery;
 /// and handling any errors, logging, and running the `on_failure` or `on_success` post-execution
 /// methods. It communicates its progress and the results back to the application through
 /// the `event_tx` channel and the return value of `Tracer::trace`, respectively.
-pub(super) struct Tracer<T>
+pub(super) struct Tracer<C, T>
 where
     T: Task,
 {
-    app: Arc<Celery>,
+    app: Arc<Celery<C>>,
     task: T,
     event_tx: UnboundedSender<TaskEvent>,
 }
 
-impl<T> Tracer<T>
+impl<C, T> Tracer<C, T>
 where
     T: Task,
 {
-    fn new(app: Arc<Celery>, task: T, event_tx: UnboundedSender<TaskEvent>) -> Self {
+    fn new(app: Arc<Celery<C>>, task: T, event_tx: UnboundedSender<TaskEvent>) -> Self {
         if let Some(eta) = task.request().eta {
             info!(
                 "Task {}[{}] received, ETA: {}",
@@ -50,9 +50,9 @@ where
 }
 
 #[async_trait]
-impl<T> TracerTrait for Tracer<T>
+impl<C: Send + Sync, T> TracerTrait for Tracer<C, T>
 where
-    T: Task,
+    T: Task<Context = C>,
 {
     async fn trace(&mut self) -> Result<(), TraceError> {
         if self.is_expired() {
@@ -235,9 +235,9 @@ pub(super) trait TracerTrait: Send + Sync {
 
 pub(super) type TraceBuilderResult = Result<Box<dyn TracerTrait>, ProtocolError>;
 
-pub(super) type TraceBuilder = Box<
+pub(super) type TraceBuilder<C> = Box<
     dyn Fn(
-            Arc<Celery>,
+            Arc<Celery<C>>,
             Message,
             TaskOptions,
             UnboundedSender<TaskEvent>,
@@ -248,8 +248,8 @@ pub(super) type TraceBuilder = Box<
         + 'static,
 >;
 
-pub(super) fn build_tracer<T: Task + Send + 'static>(
-    app: Arc<Celery>,
+pub(super) fn build_tracer<C: Send + Sync + 'static, T: Task<Context = C> + Send + 'static>(
+    app: Arc<Celery<C>>,
     message: Message,
     mut options: TaskOptions,
     event_tx: UnboundedSender<TaskEvent>,
@@ -268,5 +268,5 @@ pub(super) fn build_tracer<T: Task + Send + 'static>(
     // it.
     let task = T::from_request(request, options);
 
-    Ok(Box::new(Tracer::<T>::new(app.clone(), task, event_tx)))
+    Ok(Box::new(Tracer::<C, T>::new(app.clone(), task, event_tx)))
 }

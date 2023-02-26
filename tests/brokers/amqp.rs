@@ -38,6 +38,7 @@ impl Task for add {
 
     type Params = AddParams;
     type Returns = i32;
+    type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
         Self { request, options }
@@ -53,7 +54,7 @@ impl Task for add {
 
     async fn run(
         &self,
-        _app: &Arc<Celery>,
+        _app: &Arc<Celery<Self::Context>>,
         params: Self::Params,
     ) -> Result<Self::Returns, TaskError> {
         Ok(params.x + params.y)
@@ -71,6 +72,7 @@ impl Task for add {
 async fn test_amqp_broker() {
     let my_app = celery::app!(
         broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672//".into()) },
+        context = (),
         tasks = [add],
         task_routes = [
             "add" => "celery",

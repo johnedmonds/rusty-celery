@@ -68,7 +68,7 @@ fn bound_task_with_other_params(t: &Self, default_time_limit: u32) -> TaskResult
 }
 
 #[celery::task(bind = true, context = true)]
-fn bound_task_with_context(t: &Self, context: &Arc<Celery>) -> TaskResult<Option<u32>> {
+fn bound_task_with_context(t: &Self, context: &Arc<Celery<()>>) -> TaskResult<Option<u32>> {
     println!("{}", context.hostname);
     t.retry_with_countdown(2)?;
     Ok(t.time_limit())
@@ -77,7 +77,7 @@ fn bound_task_with_context(t: &Self, context: &Arc<Celery>) -> TaskResult<Option
 #[celery::task(bind = true, context = true)]
 fn bound_task_with_other_params_and_context(
     t: &Self,
-    context: &Arc<Celery>,
+    context: &Arc<Celery<()>>,
     default_time_limit: u32,
 ) -> TaskResult<u32> {
     println!("{}", context.hostname);

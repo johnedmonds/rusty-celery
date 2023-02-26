@@ -283,6 +283,7 @@ impl Task for DummyTask {
     const ARGS: &'static [&'static str] = &[];
     type Params = ();
     type Returns = ();
+    type Context = ();
 
     fn from_request(_request: Request<Self>, _options: TaskOptions) -> Self {
         unimplemented!()
@@ -296,7 +297,11 @@ impl Task for DummyTask {
         unimplemented!()
     }
 
-    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery<Self::Context>>,
+        _params: Self::Params,
+    ) -> TaskResult<Self::Returns> {
         unimplemented!()
     }
 }
@@ -310,6 +315,7 @@ impl Task for DummyTask2 {
     const ARGS: &'static [&'static str] = &[];
     type Params = ();
     type Returns = ();
+    type Context = ();
 
     fn from_request(_request: Request<Self>, _options: TaskOptions) -> Self {
         unimplemented!()
@@ -323,7 +329,11 @@ impl Task for DummyTask2 {
         unimplemented!()
     }
 
-    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery<Self::Context>>,
+        _params: Self::Params,
+    ) -> TaskResult<Self::Returns> {
         unimplemented!()
     }
 }

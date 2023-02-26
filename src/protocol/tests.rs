@@ -25,6 +25,7 @@ impl Task for TestTask {
 
     type Params = TestTaskParams;
     type Returns = ();
+    type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
         Self { request, options }
@@ -38,7 +39,11 @@ impl Task for TestTask {
         &self.options
     }
 
-    async fn run(&self, _app: &Arc<Celery>, _params: Self::Params) -> Result<(), TaskError> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery<Self::Context>>,
+        _params: Self::Params,
+    ) -> Result<(), TaskError> {
         Ok(())
     }
 }

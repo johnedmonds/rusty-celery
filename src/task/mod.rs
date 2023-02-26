@@ -69,6 +69,9 @@ pub trait Task: Send + Sync + std::marker::Sized {
     /// The return type of the task.
     type Returns: Send + Sync + std::fmt::Debug;
 
+    /// The context passed to the Celery app when the user constructed it.
+    type Context: Send + Sync;
+
     /// Used to initialize a task instance from a request.
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self;
 
@@ -94,7 +97,11 @@ pub trait Task: Send + Sync + std::marker::Sized {
     fn options(&self) -> &TaskOptions;
 
     /// This function defines how a task executes.
-    async fn run(&self, app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns>;
+    async fn run(
+        &self,
+        app: &Arc<Celery<Self::Context>>,
+        params: Self::Params,
+    ) -> TaskResult<Self::Returns>;
 
     /// Callback that will run after a task fails.
     #[allow(unused_variables)]

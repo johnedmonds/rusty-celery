@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-async fn build_basic_app() -> Celery {
+async fn build_basic_app() -> Celery<()> {
     let celery = CeleryBuilder::new("mock-app", "mock://localhost:8000")
-        .build()
+        .build(())
         .await
         .unwrap();
     celery.register_task::<AddTask>().await.unwrap();
@@ -18,12 +18,12 @@ async fn build_basic_app() -> Celery {
     celery
 }
 
-async fn build_configured_app() -> Celery {
+async fn build_configured_app() -> Celery<()> {
     let celery = CeleryBuilder::new("mock-app", "mock://localhost:8000")
         .task_time_limit(10)
         .task_max_retries(100)
         .task_content_type(MessageContentType::Yaml)
-        .build()
+        .build(())
         .await
         .unwrap();
     celery.register_task::<AddTask>().await.unwrap();
@@ -52,6 +52,7 @@ impl Task for AddTask {
 
     type Params = AddParams;
     type Returns = i32;
+    type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
         Self { request, options }
@@ -65,7 +66,11 @@ impl Task for AddTask {
         &self.options
     }
 
-    async fn run(&self, _app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery<Self::Context>>,
+        params: Self::Params,
+    ) -> TaskResult<Self::Returns> {
         Ok(params.x + params.y)
     }
 }
@@ -104,6 +109,7 @@ impl Task for MultiplyTask {
 
     type Params = MultiplyParams;
     type Returns = i32;
+    type Context = ();
 
     fn from_request(request: Request<Self>, options: TaskOptions) -> Self {
         Self { request, options }
@@ -117,7 +123,11 @@ impl Task for MultiplyTask {
         &self.options
     }
 
-    async fn run(&self, _app: &Arc<Celery>, params: Self::Params) -> TaskResult<Self::Returns> {
+    async fn run(
+        &self,
+        _app: &Arc<Celery<Self::Context>>,
+        params: Self::Params,
+    ) -> TaskResult<Self::Returns> {
         Ok(params.x * params.y)
     }
 }

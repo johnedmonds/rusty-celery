@@ -460,6 +460,42 @@ fn args_to_typed_inputs<'a>(
         .collect()
 }
 
+fn celery_context_type<'a>(ty: &'a Box<syn::Type>) -> &'a syn::Type {
+    macro_rules! unwrap_type {
+        ($input:expr, $($wrapper:tt)+) => {
+            if let $($wrapper)+(ref x) = $input {
+                x
+            } else {
+                panic!(
+                    "expected {} to be {}",
+                    stringify!($input),
+                    stringify!($($wrapper)+)
+                )
+            }
+        };
+    }
+    fn generic_type_from_path<'a>(ty: &'a syn::Type) -> &'a syn::Type {
+        unwrap_type!(
+            unwrap_type!(
+                unwrap_type!(*ty, syn::Type::Path)
+                    .path
+                    .segments
+                    .last()
+                    .expect("Missing arg for Arc")
+                    .arguments,
+                syn::PathArguments::AngleBracketed
+            )
+            .args
+            .last()
+            .expect("Missing Arc"),
+            syn::GenericArgument::Type
+        )
+    }
+    generic_type_from_path(generic_type_from_path(
+        &unwrap_type!(**ty, syn::Type::Reference).elem,
+    ))
+}
+
 impl ToTokens for Task {
     fn to_tokens(&self, dst: &mut TokenStream) {
         let krate = quote!(::celery);
@@ -510,6 +546,15 @@ impl ToTokens for Task {
         let task_name = self.name.as_ref().unwrap();
         let skip_amount = self.bind as usize + (self.context as usize);
         let types_and_idents = self.original_args.iter().map(arg_to_type_and_ident);
+        let celery_generic_type = self
+            .context
+            .then(|| types_and_idents.clone().nth(skip_amount - 1))
+            .flatten()
+            .flatten()
+            .map(|ti| ti.0)
+            .map(celery_context_type)
+            .map(|ty| quote! {#ty})
+            .unwrap_or(quote! {()});
         let normal_types_and_idents = types_and_idents.clone().skip(skip_amount).flatten();
         let idents = types_and_idents
             .clone()
@@ -651,6 +696,7 @@ impl ToTokens for Task {
 
                     type Params = #params_type;
                     type Returns = <#return_type as #krate::task::AsTaskResult>::Returns;
+                    type Context = #celery_generic_type;
 
                     fn from_request(
                         request: #krate::task::Request<Self>,
@@ -668,7 +714,7 @@ impl ToTokens for Task {
                     }
 
                     #[allow(unused_variables)]
-                    async fn run(&self, app: &std::sync::Arc<#krate::Celery>, params: Self::Params) -> #return_type {
+                    async fn run(&self, app: &std::sync::Arc<#krate::Celery<Self::Context>>, params: Self::Params) -> #return_type {
                         #deserialized_bindings
                         #call_run_implementation
                     }

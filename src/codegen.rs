@@ -5,21 +5,11 @@ pub use celery_codegen::task;
 macro_rules! __app_internal {
     (
         $broker_type:ty { $broker_url:expr },
+        $context:expr,
         [ $( $t:ty ),* ],
         [ $( $pattern:expr => $queue:expr ),* ],
         $( $x:ident = $y:expr, )*
     ) => {{
-        async fn _build_app(mut builder: $crate::CeleryBuilder) ->
-            $crate::export::Result<$crate::export::Arc<$crate::Celery>> {
-            let celery: $crate::Celery = builder.build().await?;
-
-            $(
-                celery.register_task::<$t>().await?;
-            )*
-
-            Ok($crate::export::Arc::new(celery))
-        }
-
         let broker_url = $broker_url;
 
         let mut builder = $crate::CeleryBuilder::new("celery", &broker_url);
@@ -32,7 +22,28 @@ macro_rules! __app_internal {
             builder = builder.task_route($pattern, $queue);
         )*
 
-        _build_app(builder)
+        async {
+            match builder.build($context).await {
+                Ok(celery) => {
+                    let registration_results = IntoIterator::into_iter([
+                        $(
+                            celery.register_task::<$t>().await,
+                        )*
+                    ]);
+                    let registration_result_err = registration_results
+                        .flat_map(|result: Result<(), $crate::error::CeleryError>| result.err())
+                        .next();
+                    if let Some(e) = registration_result_err {
+                        Err(e)
+                    } else {
+                        Ok($crate::export::Arc::new(celery))
+                    }
+                },
+                Err(e) => {
+                    Err(e)
+                }
+            }
+        }
     }};
 }
 
@@ -126,6 +137,7 @@ macro_rules! __beat_internal {
 /// # async fn main() -> Result<()> {
 /// let app = celery::app!(
 ///     broker = AMQPBroker { std::env::var("AMQP_ADDR").unwrap() },
+///     context = (),
 ///     tasks = [ add ],
 ///     task_routes = [ "*" => "celery" ],
 /// ).await?;
@@ -152,12 +164,14 @@ macro_rules! __beat_internal {
 macro_rules! app {
     (
         broker = $broker_type:ty { $broker_url:expr },
+        context = $context:expr,
         tasks = [ $( $t:ty ),* $(,)? ],
         task_routes = [ $( $pattern:expr => $queue:expr ),* $(,)? ]
         $(, $x:ident = $y:expr )* $(,)?
     ) => {
         $crate::__app_internal!(
             $broker_type { $broker_url },
+            $context,
             [ $( $t ),* ],
             [ $( $pattern => $queue ),* ],
             $( $x = $y, )*

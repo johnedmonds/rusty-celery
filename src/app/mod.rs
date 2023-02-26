@@ -190,7 +190,7 @@ impl CeleryBuilder {
     }
 
     /// Construct a [`Celery`] app with the current configuration.
-    pub async fn build(self) -> Result<Celery, CeleryError> {
+    pub async fn build<C>(self, context: C) -> Result<Celery<C>, CeleryError> {
         // Declare default queue to broker.
         let broker_builder = self
             .config
@@ -218,6 +218,7 @@ impl CeleryBuilder {
             broker,
             default_queue: self.config.default_queue,
             task_options: self.config.task_options,
+            context,
             task_routes,
             task_trace_builders: RwLock::new(HashMap::new()),
             broker_connection_timeout: self.config.broker_connection_timeout,
@@ -230,7 +231,7 @@ impl CeleryBuilder {
 
 /// A [`Celery`] app is used to produce or consume tasks asynchronously. This is the struct that is
 /// created with the [`app!`](crate::app!) macro.
-pub struct Celery {
+pub struct Celery<C> {
     /// An arbitrary, human-readable name for the app.
     pub name: String,
 
@@ -246,12 +247,15 @@ pub struct Celery {
     /// Default task options.
     pub task_options: TaskOptions,
 
+    /// Context passed by the caller during creation.
+    pub context: C,
+
     /// A vector of routing rules in the order of their importance.
     task_routes: Vec<Rule>,
 
     /// Mapping of task name to task tracer factory. Used to create a task tracer
     /// from an incoming message.
-    task_trace_builders: RwLock<HashMap<String, TraceBuilder>>,
+    task_trace_builders: RwLock<HashMap<String, TraceBuilder<C>>>,
 
     broker_connection_timeout: u32,
     broker_connection_retry: bool,
@@ -259,7 +263,7 @@ pub struct Celery {
     broker_connection_retry_delay: u32,
 }
 
-impl Celery {
+impl<C: Send + Sync + 'static> Celery<C> {
     /// Print a pretty ASCII art logo and configuration settings.
     ///
     /// This is useful and fun to print from a worker application right after
@@ -320,12 +324,12 @@ impl Celery {
     }
 
     /// Register a task.
-    pub async fn register_task<T: Task + 'static>(&self) -> Result<(), CeleryError> {
+    pub async fn register_task<T: Task<Context = C> + 'static>(&self) -> Result<(), CeleryError> {
         let mut task_trace_builders = self.task_trace_builders.write().await;
         if task_trace_builders.contains_key(T::NAME) {
             Err(CeleryError::TaskRegistrationError(T::NAME.into()))
         } else {
-            task_trace_builders.insert(T::NAME.into(), Box::new(build_tracer::<T>));
+            task_trace_builders.insert(T::NAME.into(), Box::new(build_tracer::<C, T>));
             debug!("Registered task {}", T::NAME);
             Ok(())
         }
